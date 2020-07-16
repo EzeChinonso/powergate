@@ -10,6 +10,7 @@ import (
 	"github.com/grpc-ecosystem/go-grpc-middleware/util/metautils"
 	"github.com/ipfs/go-cid"
 	logger "github.com/ipfs/go-log/v2"
+	"github.com/textileio/powergate/deals"
 	"github.com/textileio/powergate/ffs"
 	"github.com/textileio/powergate/ffs/api"
 	"github.com/textileio/powergate/ffs/manager"
@@ -576,6 +577,32 @@ func (s *RPC) RedeemPayChannel(ctx context.Context, req *RedeemPayChannelRequest
 	return &RedeemPayChannelResponse{}, nil
 }
 
+// ListStorageDealRecords calls ffs.ListStorageDealRecords.
+func (s *RPC) ListStorageDealRecords(ctx context.Context, req *ListStorageDealRecordsRequest) (*ListStorageDealRecordsResponse, error) {
+	i, err := s.getInstanceByToken(ctx)
+	if err != nil {
+		return nil, err
+	}
+	records, err := i.ListStorageDealRecords(buildListDealRecordsOptions(req.Config)...)
+	if err != nil {
+		return nil, err
+	}
+	return &ListStorageDealRecordsResponse{Records: toRPCStorageDealRecords(records)}, nil
+}
+
+// ListRetrievalDealRecords calls ffs.ListRetrievalDealRecords.
+func (s *RPC) ListRetrievalDealRecords(ctx context.Context, req *ListRetrievalDealRecordsRequest) (*ListRetrievalDealRecordsResponse, error) {
+	i, err := s.getInstanceByToken(ctx)
+	if err != nil {
+		return nil, err
+	}
+	records, err := i.ListRetrievalDealRecords(buildListDealRecordsOptions(req.Config)...)
+	if err != nil {
+		return nil, err
+	}
+	return &ListRetrievalDealRecordsResponse{Records: toRPCRetrievalDealRecords(records)}, nil
+}
+
 // ShowAll returns a list of CidInfo for all data stored in the FFS instance.
 func (s *RPC) ShowAll(ctx context.Context, req *ShowAllRequest) (*ShowAllResponse, error) {
 	i, err := s.getInstanceByToken(ctx)
@@ -769,4 +796,65 @@ func toRPCPaychInfo(info ffs.PaychInfo) *PaychInfo {
 		Addr:      info.Addr,
 		Direction: direction,
 	}
+}
+
+func buildListDealRecordsOptions(conf *ListDealRecordsConfig) []deals.ListDealRecordsOption {
+	var opts []deals.ListDealRecordsOption
+	if conf != nil {
+		opts = []deals.ListDealRecordsOption{
+			deals.WithAscending(conf.Ascending),
+			deals.WithDataCids(conf.DataCids...),
+			deals.WithFromAddrs(conf.FromAddrs...),
+			deals.WithIncludePending(conf.IncludePending),
+			deals.WithIncludeFinal(conf.IncludeFinal),
+		}
+	}
+	return opts
+}
+
+func toRPCStorageDealRecords(records []deals.StorageDealRecord) []*StorageDealRecord {
+	ret := make([]*StorageDealRecord, len(records))
+	for i, r := range records {
+		ret[i] = &StorageDealRecord{
+			RootCid: r.RootCid.String(),
+			Addr:    r.Addr,
+			Time:    r.Time,
+			Pending: r.Pending,
+			DealInfo: &StorageDealInfo{
+				ProposalCid:     r.DealInfo.ProposalCid.String(),
+				StateId:         r.DealInfo.StateID,
+				StateName:       r.DealInfo.StateName,
+				Miner:           r.DealInfo.Miner,
+				PieceCid:        r.DealInfo.PieceCID.String(),
+				Size:            r.DealInfo.Size,
+				PricePerEpoch:   r.DealInfo.PricePerEpoch,
+				StartEpoch:      r.DealInfo.StartEpoch,
+				Duration:        r.DealInfo.Duration,
+				DealId:          r.DealInfo.DealID,
+				ActivationEpoch: r.DealInfo.ActivationEpoch,
+				Msg:             r.DealInfo.Message,
+			},
+		}
+	}
+	return ret
+}
+
+func toRPCRetrievalDealRecords(records []deals.RetrievalDealRecord) []*RetrievalDealRecord {
+	ret := make([]*RetrievalDealRecord, len(records))
+	for i, r := range records {
+		ret[i] = &RetrievalDealRecord{
+			Addr: r.Addr,
+			Time: r.Time,
+			DealInfo: &RetrievalDealInfo{
+				RootCid:                 r.DealInfo.RootCid.String(),
+				Size:                    r.DealInfo.Size,
+				MinPrice:                r.DealInfo.MinPrice,
+				PaymentInterval:         r.DealInfo.PaymentInterval,
+				PaymentIntervalIncrease: r.DealInfo.PaymentIntervalIncrease,
+				Miner:                   r.DealInfo.Miner,
+				MinerPeerId:             r.DealInfo.MinerPeerID,
+			},
+		}
+	}
+	return ret
 }
